@@ -24,7 +24,7 @@
 
     <dependencies>
         <dependency>
-            <groupId>io.mysmarthome</groupId>
+            <groupId>io.mysmarthome.platforms</groupId>
             <artifactId>platform-http</artifactId>
         </dependency>
         <dependency>
@@ -64,6 +64,8 @@
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-lang3</artifactId>
         </dependency>
+
+
     </dependencies>
 
 </project>

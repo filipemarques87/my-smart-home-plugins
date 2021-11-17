@@ -1,4 +1,4 @@
-package io.mysmarthome.platforms.mqtt;
+package io.mysmarthome.platforms.mqtt.client;
 
 import lombok.RequiredArgsConstructor;
 import org.eclipse.paho.client.mqttv3.MqttClient;

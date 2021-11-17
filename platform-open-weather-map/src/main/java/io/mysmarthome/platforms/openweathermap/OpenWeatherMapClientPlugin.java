@@ -4,7 +4,9 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.mysmarthome.configuration.ApplicationProperties;
 import io.mysmarthome.device.Device;
+import io.mysmarthome.platforms.http.BaseHttpClient;
 import io.mysmarthome.platforms.http.HttpClientPlugin;
+import io.mysmarthome.platforms.http.HttpDevice;
 import lombok.extern.slf4j.Slf4j;
 import org.pf4j.Extension;
 import org.pf4j.Plugin;
@@ -20,11 +22,15 @@ public class OpenWeatherMapClientPlugin extends Plugin {
     }
 
     @Extension
-    public static class OpenWeatherMapClient extends HttpClientPlugin.HttpClient {
+    public static class OpenWeatherMapClient extends BaseHttpClient<HttpDevice> {
 
         private String appKey;
         private String endpoint;
         private final ObjectMapper mapper = new ObjectMapper();
+
+        public OpenWeatherMapClient() {
+            super(HttpDevice.class);
+        }
 
         @Override
         public void start(ApplicationProperties config) {

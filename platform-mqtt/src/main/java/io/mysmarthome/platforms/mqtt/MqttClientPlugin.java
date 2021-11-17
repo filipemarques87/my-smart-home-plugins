@@ -6,6 +6,8 @@ import io.mysmarthome.platform.PlatformPlugin;
 import io.mysmarthome.platform.message.DeviceHandler;
 import io.mysmarthome.platform.message.OnReceive;
 import io.mysmarthome.platform.message.ReceivedMessage;
+import io.mysmarthome.platforms.mqtt.client.SimpleMqttClient;
+import io.mysmarthome.platforms.mqtt.client.SimpleMqttClientException;
 import io.mysmarthome.util.ObjectHolder;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -30,7 +32,7 @@ public class MqttClientPlugin extends Plugin {
     }
 
     @Extension
-    public static class MqttClient implements PlatformPlugin {
+    public static class MqttClient implements PlatformPlugin<MqttDevice> {
         private SimpleMqttClient mqttClient = null;
         private final Map<String, DeviceHandler> handlers = new HashMap<>();
 
@@ -40,9 +42,9 @@ public class MqttClientPlugin extends Plugin {
         }
 
         @Override
-        public void registerDevice(Device device, final OnReceive callback) {
+        public void onRegisterDevice(MqttDevice device, final OnReceive callback) {
             log.info("Register device '{}' for mqtt plugin", device.getDeviceId());
-            Optional.ofNullable(device.getCustomInfo("listenTopic").asString())
+            Optional.ofNullable(device.getListenTopic())
                     .ifPresent(topic -> handlers.put(topic, DeviceHandler.builder()
                             .device(device)
                             .callback(callback)
@@ -69,13 +71,18 @@ public class MqttClientPlugin extends Plugin {
         }
 
         @Override
-        public CompletableFuture<Optional<ReceivedMessage>> send(Device device, Object payload) {
-            String pubTopic = device.getCustomInfo("actionTopic").asString();
+        public MqttDevice getPlatformSpecificDevice(Device device) {
+            return new MqttDevice(device);
+        }
+
+        @Override
+        public CompletableFuture<Optional<ReceivedMessage>> onSend(MqttDevice device, Object payload) {
+            String pubTopic = device.getActionTopic();
             if (StringUtils.isBlank(pubTopic)) {
                 return CompletableFuture.supplyAsync(Optional::empty);
             }
 
-            String subTopic = device.getCustomInfo("listenTopic").asString();
+            String subTopic = device.getListenTopic();
             if (StringUtils.isBlank(subTopic)) {
                 publish(pubTopic, payload);
                 return CompletableFuture.supplyAsync(Optional::empty);

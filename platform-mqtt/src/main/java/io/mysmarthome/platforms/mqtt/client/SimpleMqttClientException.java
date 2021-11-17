@@ -1,4 +1,4 @@
-package io.mysmarthome.platforms.mqtt;
+package io.mysmarthome.platforms.mqtt.client;
 
 public class SimpleMqttClientException extends RuntimeException {
 
