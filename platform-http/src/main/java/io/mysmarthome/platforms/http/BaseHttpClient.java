@@ -2,6 +2,7 @@ package io.mysmarthome.platforms.http;
 
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.mysmarthome.configuration.ApplicationProperties;
 import io.mysmarthome.device.Device;
 import io.mysmarthome.platform.PlatformPlugin;
@@ -14,20 +15,21 @@ import okhttp3.*;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Function;
+import java.util.function.BiFunction;
 
 import static io.mysmarthome.util.SneakyException.sneakyException;
 
 @Slf4j
 public abstract class BaseHttpClient<T extends HttpDevice> implements PlatformPlugin<T> {
 
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
     private OkHttpClient client;
     private final Map<String, DeviceHandler> handlers = new HashMap<>();
-    private Map<String, Function<HttpDevice, Request.Builder>> httpMethods;
+    private Map<String, BiFunction<HttpDevice, Object, Request.Builder>> httpMethods;
     private final Class<T> type;
 
     protected BaseHttpClient(Class<T> type) {
@@ -66,8 +68,9 @@ public abstract class BaseHttpClient<T extends HttpDevice> implements PlatformPl
     @Override
     public CompletableFuture<Optional<ReceivedMessage>> onSend(HttpDevice device, Object payload) {
         log.info("Sending request ...");
-        Request request = buildRequest(device);
+        Request request = buildRequest(device, payload);
         log.info(">>>>>>>> request {}", request);
+        log.info(">>>>>>>> request {}", request.body());
         Response response = client.newCall(request).execute();
         String body = Optional.ofNullable(response.body())
                 .map(b -> sneakyException(b::string).get())
@@ -96,28 +99,37 @@ public abstract class BaseHttpClient<T extends HttpDevice> implements PlatformPl
     }
 
 
-    private Request buildRequest(HttpDevice device) {
-        return httpMethods.get(device.getMethod()).apply(device)
+    private Request buildRequest(HttpDevice device, Object payload) {
+        return httpMethods.get(device.getMethod()).apply(device, payload)
                 .url(device.getUrl())
                 .headers(device.getHeaders())
                 .build();
     }
 
-    private Request.Builder get(HttpDevice device) {
+    private Request.Builder get(HttpDevice device, Object payload) {
         return new Request.Builder()
                 .get();
     }
 
-    private Request.Builder post(HttpDevice device) {
+    private Request.Builder post(HttpDevice device, Object payload) {
         MediaType mediaType = Optional.ofNullable(device.getHeaders().get("Content-Type"))
                 .map(MediaType::parse)
-                .orElse(MediaType.parse("text/plain"));
+                .orElse(MediaType.parse("application/json"));
+        String body;
+        try {
+            body = objectMapper.writeValueAsString(payload);
+        } catch (Exception ex) {
+            body = "{}";
+        }
+        System.out.println("-----------------------");
+        System.out.println(device.getPayload());
+        System.out.println(payload);
         return new Request.Builder()
-                .post(RequestBody.create(Objects.requireNonNullElse(device.getPayload(), ""), mediaType));
+                .post(RequestBody.create(body, mediaType));
     }
 
     protected Object prepareMessage(String responseBody) throws JsonProcessingException {
-        return responseBody;
+        return objectMapper.readValue(responseBody, Map.class);
     }
 }
 
