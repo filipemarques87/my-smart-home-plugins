@@ -67,30 +67,32 @@ public abstract class BaseHttpClient<T extends HttpDevice> implements PlatformPl
     @SneakyThrows
     @Override
     public CompletableFuture<Optional<ReceivedMessage>> onSend(HttpDevice device, Object payload) {
-        log.info("Sending request ...");
-        Request request = buildRequest(device, payload);
-        log.info(">>>>>>>> request {}", request);
-        log.info(">>>>>>>> request {}", request.body());
-        Response response = client.newCall(request).execute();
-        String body = Optional.ofNullable(response.body())
-                .map(b -> sneakyException(b::string).get())
-                .orElse(null);
+        log.info("Sending request for {}...", device.getDeviceId());
 
-        log.info("Response: {}", body);
+        return CompletableFuture.supplyAsync(sneakyException(() -> {
+            Request request = buildRequest(device, payload);
+            Response response = client.newCall(request).execute();
+            String body = Optional.ofNullable(response.body())
+                    .map(b -> sneakyException(b::string).get())
+                    .orElse(null);
 
-        if (response.code() >= 400) {
-            log.error("Http call with error : {}, body : {}, {}", response.code(), body, response);
-            throw new HttpCallException(response.code(), body);
-        }
+            log.debug("Response: {}", body);
 
-        ReceivedMessage message = ReceivedMessage.builder()
-                .message(prepareMessage(body))
-                .build();
+            if (response.code() >= 400) {
+                log.error("Http call with error : {}, body : {}, {}", response.code(), body, response);
+                throw new HttpCallException(response.code(), body);
+            }
 
-        if (handlers.containsKey(device.getDeviceId())) {
-            handlers.get(device.getDeviceId()).broadcastMessage(message);
-        }
-        return CompletableFuture.supplyAsync(sneakyException(() -> Optional.ofNullable(message)));
+            ReceivedMessage message = ReceivedMessage.builder()
+                    .message(prepareMessage(body))
+                    .build();
+
+            if (handlers.containsKey(device.getDeviceId())) {
+                handlers.get(device.getDeviceId()).broadcastMessage(message);
+            }
+
+            return Optional.ofNullable(message);
+        }));
     }
 
     @Override
@@ -121,9 +123,6 @@ public abstract class BaseHttpClient<T extends HttpDevice> implements PlatformPl
         } catch (Exception ex) {
             body = "{}";
         }
-        System.out.println("-----------------------");
-        System.out.println(device.getPayload());
-        System.out.println(payload);
         return new Request.Builder()
                 .post(RequestBody.create(body, mediaType));
     }

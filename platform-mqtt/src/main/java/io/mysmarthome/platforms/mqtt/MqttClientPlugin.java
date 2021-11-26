@@ -105,9 +105,9 @@ public class MqttClientPlugin extends Plugin {
                 }
             });
 
-            publish(pubTopic, payload);
-
             return CompletableFuture.supplyAsync(sneakyException(() -> {
+                publish(pubTopic, payload);
+
                 synchronized (lock) {
                     lock.wait();
                     return Optional.ofNullable(holder.get());
