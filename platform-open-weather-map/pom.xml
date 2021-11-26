@@ -15,7 +15,7 @@
         <maven.compiler.source>11</maven.compiler.source>
         <maven.compiler.target>11</maven.compiler.target>
 
-        <plugin.id>mqtt-client</plugin.id>
+        <plugin.id>openweathermap-client</plugin.id>
         <plugin.class>io.mysmarthome.platforms.openweathermap.OpenWeatherMapClientPlugin</plugin.class>
         <plugin.version>${project.version}</plugin.version>
         <plugin.provider>io.mysmarthome</plugin.provider>
@@ -23,10 +23,6 @@
     </properties>
 
     <dependencies>
-        <dependency>
-            <groupId>io.mysmarthome.platforms</groupId>
-            <artifactId>platform-http</artifactId>
-        </dependency>
         <dependency>
             <groupId>io.mysmarthome</groupId>
             <artifactId>sdk</artifactId>
@@ -64,8 +60,5 @@
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-lang3</artifactId>
         </dependency>
-
-
     </dependencies>
-
 </project>

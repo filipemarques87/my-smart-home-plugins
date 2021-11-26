@@ -1,8 +1,7 @@
-package io.mysmarthome.platforms.http;
+package io.mysmarthome.platforms.openweathermap;
 
 import io.mysmarthome.device.Device;
 import io.mysmarthome.util.TypedValue;
-import lombok.AllArgsConstructor;
 import okhttp3.Headers;
 
 import java.util.HashMap;
@@ -10,10 +9,15 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
-@AllArgsConstructor
-public class HttpDevice implements Device {
+public class OpenWeatherMapDevice implements Device {
 
-    protected final Device device;
+    private final String fullUrl;
+    private final Device device;
+
+    public OpenWeatherMapDevice(Device device, String url, String appId) {
+        this.device = device;
+        fullUrl = buildFullUrl(url, appId);
+    }
 
     public Device getOriginalDevice() {
         return device;
@@ -30,13 +34,24 @@ public class HttpDevice implements Device {
     }
 
     public String getUrl() {
-        return Optional.ofNullable(getCustomInfo("url").asString())
-                .orElseThrow(HttpCallException::new);
+        return fullUrl;
     }
 
-    public String getMethod() {
-        return Optional.ofNullable(getCustomInfo("method").asString())
-                .orElse("get");
+    public String getCity() {
+        return device.getCustomInfo("city").asString();
+    }
+
+    public String getUnits() {
+        return Optional.ofNullable(device.getCustomInfo("units").asString())
+                .orElse("metric");
+    }
+
+    protected String buildFullUrl(String url, String appId) {
+        return String.format("%s?q=%s&units=%s&appid=%s",
+                url,
+                getCity(),
+                getUnits(),
+                appId);
     }
 
     public Headers getHeaders() {
@@ -46,9 +61,5 @@ public class HttpDevice implements Device {
             headers.put(Objects.toString(o.getKey()), Objects.toString(o.getValue()));
         }
         return Headers.of(headers);
-    }
-
-    public String getPayload() {
-        return getCustomInfo("payload").asString();
     }
 }

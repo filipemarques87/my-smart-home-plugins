@@ -11,7 +11,6 @@ import java.io.IOException;
 import java.io.Serializable;
 
 @Data
-@Setter(AccessLevel.NONE)
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
@@ -27,6 +26,7 @@ public class OpenWeatherResponse implements Serializable {
     private double snow;
     private double rain;
     private double clouds;
+    private Units units;
 
     static class OpenWeatherResponseDeserializer extends StdDeserializer<OpenWeatherResponse> {
 
