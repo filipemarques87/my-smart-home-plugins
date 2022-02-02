@@ -20,6 +20,7 @@
         <module>platform-mqtt</module>
         <module>platform-http</module>
         <module>platform-open-weather-map</module>
+        <module>platform-ffmpeg</module>
     </modules>
 
     <properties>

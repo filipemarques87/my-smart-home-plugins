@@ -136,6 +136,3 @@ public class HttpClientPlugin extends Plugin {
         }
     }
 }
-
-
-
