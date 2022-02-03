@@ -87,10 +87,6 @@ public class FfmpegClientPlugin extends Plugin {
         @SneakyThrows
         @Override
         public CompletableFuture<Optional<ReceivedMessage>> onSend(FfmpegDevice device, Object payload) {
-            if (monitor.cannotStream()) {
-                throw new IllegalMonitorStateException("Cannot start streaming");
-            }
-
             Map<String, Object> request = (Map<String, Object>) payload;
             if (isToStartStreaming(request)) {
                 startStreaming(device);
@@ -167,6 +163,9 @@ public class FfmpegClientPlugin extends Plugin {
 
         @SneakyThrows
         private void startStreaming(FfmpegDevice device) {
+            if (monitor.cannotStream()) {
+                throw new IllegalMonitorStateException("Cannot start streaming");
+            }
             if (monitor.streamAlreadyRunning(device)) {
                 return;
             }
