@@ -17,6 +17,7 @@ import org.pf4j.PluginWrapper;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -37,11 +38,13 @@ public class FfmpegClientPlugin extends Plugin {
 
         private final Map<String, DeviceHandler> handlers = new HashMap<>();
         private String dataFolder;
+        private String executablePath;
         private Monitor monitor;
 
         @Override
         public void start(ApplicationProperties config) {
             dataFolder = config.getString("ffmpeg.dataFolder");
+            executablePath = config.getString("ffmpeg.executablePath");
             int maxConcurrencyExecution = config.getInt("ffmpeg.maxParallelStreams", 1);
             int inactivityTimeout = config.getInt("ffmpeg.inactivityTimeout", 8);
 
@@ -172,11 +175,12 @@ public class FfmpegClientPlugin extends Plugin {
 
             // FIXME quando ha dois pedidos ao mesmo tempo, o segundo deve bloqueat ate que o primeiro seja processado
             cleanDirectory(device);
-            String command = device.getCommand();
+            String command = prepareCommand(device);
             log.info("Executing command : {}", command);
 
             ProcessBuilder processBuilder = new ProcessBuilder();
             processBuilder.command("/bin/bash", "-l", "-c", command);
+            processBuilder.directory(Paths.get(dataFolder, device.getDeviceId()).toFile());
             Process process = processBuilder.start();
 
             monitor.addStream(device, process);
@@ -192,6 +196,31 @@ public class FfmpegClientPlugin extends Plugin {
                     .intervalUnit(TimeUnit.SECONDS)
                     .start();
             log.info("Stream started for device {}", device.getDeviceId());
+        }
+
+        @SneakyThrows
+        private String prepareCommand(FfmpegDevice device) {
+            String url = device.getUrl();
+            String protocol = new URI(url).getScheme();
+
+            return device.getCommand()
+                    .replace("${executablePath}", executablePath)
+                    .replace("${url}", device.getUrl())
+                    .replace("${protocol_options}", getProtocolOptions(protocol))
+                    .replaceAll("\\$\\{device_id}", device.getDeviceId());
+        }
+
+        private String getProtocolOptions(String protocol) {
+            if (protocol == null) {
+                return "";
+            }
+
+            switch (protocol.toLowerCase(Locale.ROOT)) {
+                case "rtsp":
+                    return "-rtsp_transport tcp";
+                default:
+                    return "";
+            }
         }
     }
 }

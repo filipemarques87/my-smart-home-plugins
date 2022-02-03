@@ -13,7 +13,7 @@ import java.util.Locale;
 public class FfmpegDevice implements Device {
 
     private static final String COMMAND = "" +
-            " /snap/bin/ffmpeg -fflags nobuffer " +
+            " ${executablePath} -fflags nobuffer " +
             " ${protocol_options} " +
             " -i  ${url} " +
             " -vsync 0 " +
@@ -27,12 +27,12 @@ public class FfmpegDevice implements Device {
             " -segment_time 2 " +
             " -segment_list_size 5 " +
             " -segment_format mpegts " +
-            " -segment_list ${device_id}/index.m3u8 " +
+            " -segment_list ./index.m3u8 " +
             " -segment_list_type m3u8 " +
             //" -segment_list_entry_prefix '' " +
-            "  ${device_id}/%3d.ts ";
+            "  %3d.ts ";
 
-    private static final String RTSP_OPTIONS = "-rtsp_transport tcp";
+//    private static final String RTSP_OPTIONS = "-rtsp_transport tcp";
 
     private final Device device;
 
@@ -58,26 +58,26 @@ public class FfmpegDevice implements Device {
 
     @SneakyThrows
     public String getCommand() {
-        String url = getUrl();
-        String protocol = new URI(url).getScheme();
-        return getCustomInfo("command").asString(COMMAND)
-                .replace("${url}", url)
-                .replace("${protocol_options}", getProtocolOptions(protocol))
-                .replaceAll("\\$\\{device_id}", Paths.get(baseDir, getDeviceId()).toString());
+//        String url = getUrl();
+//        String protocol = new URI(url).getScheme();
+        return getCustomInfo("command").asString(COMMAND);
+//                .replace("${url}", url)
+//                .replace("${protocol_options}", getProtocolOptions(protocol))
+//                .replaceAll("\\$\\{device_id}", Paths.get(baseDir, getDeviceId()).toString());
     }
 
 
-    private String getProtocolOptions(String protocol) {
-        if (protocol == null) {
-            return "";
-        }
-
-        switch (protocol.toLowerCase(Locale.ROOT)) {
-            case "rtsp":
-                return RTSP_OPTIONS;
-            default:
-                return "";
-        }
-    }
+//    private String getProtocolOptions(String protocol) {
+//        if (protocol == null) {
+//            return "";
+//        }
+//
+//        switch (protocol.toLowerCase(Locale.ROOT)) {
+//            case "rtsp":
+//                return RTSP_OPTIONS;
+//            default:
+//                return "";
+//        }
+//    }
 
 }

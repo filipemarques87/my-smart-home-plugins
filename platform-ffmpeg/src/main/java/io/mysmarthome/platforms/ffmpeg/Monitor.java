@@ -52,6 +52,7 @@ public class Monitor {
                     continue;
                 }
 
+                log.info("Kill stream for {}", p.getDevice().getDeviceId());
                 p.getProcess().destroy();
                 this.onStopListener.accept(p.getDevice());
 
