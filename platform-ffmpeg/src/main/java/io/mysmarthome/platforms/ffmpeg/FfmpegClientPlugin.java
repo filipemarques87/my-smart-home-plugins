@@ -22,10 +22,8 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
-// TODO adicionar o monitor
 @Slf4j
 public class FfmpegClientPlugin extends Plugin {
 
@@ -39,17 +37,34 @@ public class FfmpegClientPlugin extends Plugin {
 
         private final Map<String, DeviceHandler> handlers = new HashMap<>();
         private String dataFolder;
-        private int maxConcurrencyExecution;
-        private int inactivityTimeout;
-
-        private final Map<String, Object> locks = new ConcurrentHashMap<>();
-        private final Map<String, Process> processes = new HashMap<>();
+        private Monitor monitor;
 
         @Override
         public void start(ApplicationProperties config) {
             dataFolder = config.getString("ffmpeg.dataFolder");
-            maxConcurrencyExecution = config.getInt("ffmpeg.maxConcurrencyExecution", 1);
-            inactivityTimeout = config.getInt("ffmpeg.inactivityTimeout", 3);
+            int maxConcurrencyExecution = config.getInt("ffmpeg.maxParallelStreams", 1);
+            int inactivityTimeout = config.getInt("ffmpeg.inactivityTimeout", 8);
+
+            monitor = new Monitor(maxConcurrencyExecution, inactivityTimeout);
+            monitor.setOnStopListener(device -> {
+                // just notify that the stream is stopped
+                Map<String, Object> result = new HashMap<>();
+                result.put("val", "0");
+
+                ReceivedMessage message = ReceivedMessage.builder()
+                        .message(result)
+                        .build();
+
+                if (handlers.containsKey(device.getDeviceId())) {
+                    handlers.get(device.getDeviceId()).broadcastMessage(message);
+                }
+            });
+            monitor.start();
+        }
+
+        @Override
+        public void shutdown() {
+            monitor.stop();
         }
 
         @SneakyThrows
@@ -72,51 +87,49 @@ public class FfmpegClientPlugin extends Plugin {
         @SneakyThrows
         @Override
         public CompletableFuture<Optional<ReceivedMessage>> onSend(FfmpegDevice device, Object payload) {
-            waitForLock(device);
-
-            lockDevice(device);
-            try {
-                Map<String, Object> request = (Map<String, Object>) payload;
-
-
-                if ("1".equals(request.get("val"))) {
-                    cleanDirectory(device);
-                    startStreaming(device);
-                } else if ("0".equals(request.get("val"))) {
-                    processes.get(device.getDeviceId()).destroy();
-                    cleanDirectory(device);
-                }
-
-                return CompletableFuture.supplyAsync(() -> {
-
-
-                    ReceivedMessage message = ReceivedMessage.builder()
-                            .message(request)
-                            .build();
-
-                    if (handlers.containsKey(device.getDeviceId())) {
-                        handlers.get(device.getDeviceId()).broadcastMessage(message);
-                    }
-
-                    return Optional.ofNullable(message);
-                });
-
-            } finally {
-                releaseLock(device);
+            if (monitor.cannotStream()) {
+                throw new IllegalMonitorStateException("Cannot start streaming");
             }
 
+            Map<String, Object> request = (Map<String, Object>) payload;
+            if (isToStartStreaming(request)) {
+                startStreaming(device);
+            } else if (isToStopStreaming(request)) {
+                stopStreaming(device);
 
+            } else {
+                throw new UnsupportedOperationException();
+            }
+
+            return CompletableFuture.supplyAsync(() -> {
+                ReceivedMessage message = ReceivedMessage.builder()
+                        .message(request)
+                        .build();
+
+                if (handlers.containsKey(device.getDeviceId())) {
+                    handlers.get(device.getDeviceId()).broadcastMessage(message);
+                }
+
+                return Optional.ofNullable(message);
+            });
+        }
+
+        private boolean isToStartStreaming(Map<String, Object> request) {
+            return "1".equals(request.get("val"));
+        }
+
+        private boolean isToStopStreaming(Map<String, Object> request) {
+            return "0".equals(request.get("val"));
         }
 
         @SneakyThrows
         public DownloadDetails onDownload(FfmpegDevice device, String path) {
-            File original = Paths.get(dataFolder, device.getDeviceId(), path).toFile();
-            File copied = Paths.get(dataFolder, device.getDeviceId(), UUID.nameUUIDFromBytes(path.getBytes()).toString()).toFile();
-            FileUtils.copyFile(original, copied);
+            monitor.keepAlive(device);
 
+            File original = Paths.get(dataFolder, device.getDeviceId(), path).toFile();
             try {
                 return DownloadDetails.builder()
-                        .file(copied)
+                        .file(original)
                         .fileSstream(new FileInputStream(original.getAbsoluteFile()))
                         .build();
             } catch (FileNotFoundException e) {
@@ -132,28 +145,11 @@ public class FfmpegClientPlugin extends Plugin {
             return "ffmpeg";
         }
 
-        private void lockDevice(Device device) {
-            locks.putIfAbsent(device.getDeviceId(), new Object());
-        }
-
-        private  void releaseLock(Device device) {
-            locks.remove(device.getDeviceId());
-//            if (hasLock(device)) {
-//                locks.get(device.getDeviceId()).notify();
-//            }
-        }
-
-        private synchronized boolean hasLock(Device device) {
-            return locks.containsKey(device.getDeviceId());
-        }
-
         @SneakyThrows
-        private synchronized void waitForLock(Device device) {
-//            if (hasLock(device)) {
-//                locks.get(device.getDeviceId()).wait();
-//            }
+        private void stopStreaming(Device device) {
+            monitor.stopStream(device);
+            cleanDirectory(device);
         }
-
 
         @SneakyThrows
         private void cleanDirectory(Device device) {
@@ -171,19 +167,22 @@ public class FfmpegClientPlugin extends Plugin {
 
         @SneakyThrows
         private void startStreaming(FfmpegDevice device) {
-//            log.info("Starting stream for device {}", device.getDeviceId());
+            if (monitor.streamAlreadyRunning(device)) {
+                return;
+            }
+
+            // FIXME quando ha dois pedidos ao mesmo tempo, o segundo deve bloqueat ate que o primeiro seja processado
+            cleanDirectory(device);
             String command = device.getCommand();
-//            log.info("Execute ffmpeg command: {}", command);
+            log.info("Executing command : {}", command);
 
             ProcessBuilder processBuilder = new ProcessBuilder();
-//            processBuilder.command("/snap/bin/ffmpeg", command);
             processBuilder.command("/bin/bash", "-l", "-c", command);
-            processBuilder.inheritIO();
             Process process = processBuilder.start();
 
-            processes.put(device.getDeviceId(),process);
+            monitor.addStream(device, process);
 
-
+            // wait until have some files in the directory
             Path folder = Paths.get(dataFolder, device.getDeviceId());
             RetryExecutor.builder()
                     .task(() -> Arrays.stream(Objects.requireNonNull(folder.toFile().listFiles()))
@@ -193,10 +192,7 @@ public class FfmpegClientPlugin extends Plugin {
                     .interval(2)
                     .intervalUnit(TimeUnit.SECONDS)
                     .start();
-//            log.info("Stream started for device {}", device.getDeviceId());
+            log.info("Stream started for device {}", device.getDeviceId());
         }
     }
 }
-
-
-
