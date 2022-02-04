@@ -67,19 +67,23 @@ public class Monitor {
     }
 
     public void keepAlive(Device device) {
-        activeStreams.get(device.getDeviceId()).setLastRequest(Instant.now());
+        if (activeStreams.containsKey(device.getDeviceId())) {
+            activeStreams.get(device.getDeviceId()).setLastRequest(Instant.now());
+        }
     }
 
-    public boolean streamAlreadyRunning(Device device) {
-        return activeStreams.containsKey(device.getDeviceId());
+    public void addStream(Device device) {
+        if (activeStreams.containsKey(device.getDeviceId())) {
+            activeStreams.get(device.getDeviceId()).addUser();
+        }
     }
 
     public void addStream(Device device, Process process) {
         if (activeStreams.containsKey(device.getDeviceId())) {
-            // already streaming, nothing to do
+            activeStreams.get(device.getDeviceId()).addUser();
             return;
         }
-        if (cannotStream()) {
+        if (cannotStream(device)) {
             throw new IllegalMonitorStateException("Maximum stream allowed in parallel reached");
         }
 
@@ -92,16 +96,28 @@ public class Monitor {
             return;
         }
 
+        activeStreams.get(device.getDeviceId()).removeUser();
+        if (activeStreams.get(device.getDeviceId()).hasUsers()) {
+            return;
+        }
+
         MonitoredProcess p = activeStreams.remove(device.getDeviceId());
         p.getProcess().destroy();
-        this.onStopListener.accept(device);
+//        this.onStopListener.accept(device);
     }
 
     public void setOnStopListener(Consumer<Device> onStopListener) {
         this.onStopListener = onStopListener;
     }
 
-    public boolean cannotStream() {
+    public boolean alreadyStreaming(Device device) {
+        return activeStreams.containsKey(device.getDeviceId());
+    }
+
+    public boolean cannotStream(Device device) {
+        if (alreadyStreaming(device)) {
+            return false;
+        }
         return activeStreams.size() >= maxParallelStreams;
     }
 
@@ -125,10 +141,24 @@ public class Monitor {
 
         private Instant lastRequest;
 
+        private int users = 1;
+
         public MonitoredProcess(Device device, Process process) {
             this.device = device;
             this.process = process;
             this.lastRequest = Instant.now();
+        }
+
+        public void addUser() {
+            users++;
+        }
+
+        public void removeUser() {
+            users--;
+        }
+
+        public boolean hasUsers() {
+            return users > 0;
         }
     }
 }

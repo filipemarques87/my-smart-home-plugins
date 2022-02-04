@@ -91,11 +91,12 @@ public class FfmpegClientPlugin extends Plugin {
         @Override
         public CompletableFuture<Optional<ReceivedMessage>> onSend(FfmpegDevice device, Object payload) {
             Map<String, Object> request = (Map<String, Object>) payload;
-            if (isToStartStreaming(request)) {
-                startStreaming(device);
-            } else if (isToStopStreaming(request)) {
-                stopStreaming(device);
 
+            final boolean needToSendMessage;
+            if (isToStartStreaming(request)) {
+                needToSendMessage = startStreaming(device);
+            } else if (isToStopStreaming(request)) {
+                needToSendMessage = stopStreaming(device);
             } else {
                 throw new UnsupportedOperationException();
             }
@@ -105,7 +106,7 @@ public class FfmpegClientPlugin extends Plugin {
                         .message(request)
                         .build();
 
-                if (handlers.containsKey(device.getDeviceId())) {
+                if (handlers.containsKey(device.getDeviceId()) && needToSendMessage) {
                     handlers.get(device.getDeviceId()).broadcastMessage(message);
                 }
 
@@ -145,9 +146,13 @@ public class FfmpegClientPlugin extends Plugin {
         }
 
         @SneakyThrows
-        private void stopStreaming(Device device) {
+        private boolean stopStreaming(Device device) {
             monitor.stopStream(device);
+            if (monitor.alreadyStreaming(device)) {
+                return false;
+            }
             cleanDirectory(device);
+            return true;
         }
 
         @SneakyThrows
@@ -165,12 +170,13 @@ public class FfmpegClientPlugin extends Plugin {
         }
 
         @SneakyThrows
-        private void startStreaming(FfmpegDevice device) {
-            if (monitor.cannotStream()) {
-                throw new IllegalMonitorStateException("Cannot start streaming");
+        private boolean startStreaming(FfmpegDevice device) {
+            if (monitor.alreadyStreaming(device)) {
+                monitor.addStream(device);
+                return false;
             }
-            if (monitor.streamAlreadyRunning(device)) {
-                return;
+            if (monitor.cannotStream(device)) {
+                throw new IllegalMonitorStateException("Cannot start streaming");
             }
 
             // FIXME quando ha dois pedidos ao mesmo tempo, o segundo deve bloqueat ate que o primeiro seja processado
@@ -187,15 +193,21 @@ public class FfmpegClientPlugin extends Plugin {
 
             // wait until have some files in the directory
             Path folder = Paths.get(dataFolder, device.getDeviceId());
-            RetryExecutor.builder()
-                    .task(() -> Arrays.stream(Objects.requireNonNull(folder.toFile().listFiles()))
-                            .filter(f -> f.getName().endsWith(".ts") || f.getName().endsWith(".m3u8"))// TODO talvez alterar isso para verificar mesmo se existe os dois ficheiros
-                            .count() >= 2)
-                    .maxRetries(10)
-                    .interval(2)
-                    .intervalUnit(TimeUnit.SECONDS)
-                    .start();
+            try {
+                RetryExecutor.builder()
+                        .task(() -> Arrays.stream(Objects.requireNonNull(folder.toFile().listFiles()))
+                                .filter(f -> f.getName().endsWith(".ts") || f.getName().endsWith(".m3u8"))// TODO talvez alterar isso para verificar mesmo se existe os dois ficheiros
+                                .count() >= 2)
+                        .maxRetries(20) // TODO fazer disto uma configuracao
+                        .interval(2) // TODO fazer disto uma configuracao
+                        .intervalUnit(TimeUnit.SECONDS)
+                        .start();
+            } catch (Exception e) {
+                monitor.stopStream(device);
+                throw e;
+            }
             log.info("Stream started for device {}", device.getDeviceId());
+            return true;
         }
 
         @SneakyThrows
