@@ -21,6 +21,7 @@
         <module>platform-http</module>
         <module>platform-open-weather-map</module>
         <module>platform-ffmpeg</module>
+        <module>platform-ffmpeg-stream</module>
     </modules>
 
     <properties>
